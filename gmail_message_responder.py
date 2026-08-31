@@ -385,12 +385,29 @@ def send_email(
         ]
     }
 
-    try:
-        result = mailjet.send.create(data=data)
+    max_attempts = 3
+    retry_delay_seconds = 10
 
-    except Exception:
-        logger.exception("Mailjet send failed")
-        return False
+    for attempt in range(1, max_attempts + 1):
+        try:
+            result = mailjet.send.create(data=data)
+            break
+
+        except Exception:
+            if attempt >= max_attempts:
+                logger.exception(
+                    "Mailjet send failed after %d attempt(s)",
+                    max_attempts,
+                )
+                return False
+
+            logger.exception(
+                "Mailjet send attempt %d/%d failed; retrying in %d seconds",
+                attempt,
+                max_attempts,
+                retry_delay_seconds,
+            )
+            time.sleep(retry_delay_seconds)
 
     if result.status_code >= 300:
         try:
@@ -615,7 +632,7 @@ def process_one_message(
     status, fetched = mailbox.uid(
         "FETCH",
         message_id,
-        "(RFC822)",
+        "(BODY.PEEK[])",
     )
 
     if status != "OK" or not fetched:
